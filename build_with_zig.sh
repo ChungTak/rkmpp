@@ -206,7 +206,7 @@ fi
 # 大小优化配置
 if [ "$OPTIMIZE_SIZE" = true ]; then
     # 大小优化标志
-    ZIG_OPTIMIZE_FLAGS="-Os -DNDEBUG -ffunction-sections -fdata-sections -fvisibility=hidden"
+    ZIG_OPTIMIZE_FLAGS="-Os -DNDEBUG -ffunction-sections -fdata-sections"
     export LDFLAGS="-Wl,--gc-sections -Wl,--strip-all"
 else
     ZIG_OPTIMIZE_FLAGS="-O2 -DNDEBUG"

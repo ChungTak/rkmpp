@@ -203,6 +203,16 @@ if [ ! -f "$RKMPP_SOURCE_DIR/CMakeLists.txt" ]; then
     exit 1
 fi
 
+# 大小优化配置
+if [ "$OPTIMIZE_SIZE" = true ]; then
+    # 大小优化标志
+    ZIG_OPTIMIZE_FLAGS="-Os -DNDEBUG -ffunction-sections -fdata-sections -fvisibility=hidden"
+    export LDFLAGS="-Wl,--gc-sections -Wl,--strip-all"
+else
+    ZIG_OPTIMIZE_FLAGS="-O2 -DNDEBUG"
+    export LDFLAGS=""
+fi
+
 # 创建安装目录
 mkdir -p "$INSTALL_DIR"
 
@@ -222,83 +232,41 @@ if [[ "$TARGET" == *"-linux-android"* ]]; then
         echo -e "${RED}请设置 ANDROID_NDK_HOME 环境变量${NC}"
         exit 1
     fi
-
+    HOST_TAG=linux-x86_64
+    TOOLCHAIN=$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/$HOST_TAG
+    export PATH=$TOOLCHAIN/bin:$PATH
+    ANDROID_TOOLCHAIN_FILE="$ANDROID_NDK_ROOT/build/cmake/android.toolchain.cmake"
     ANDROID_PLATFORM=android-21
-    
+
     case "$TARGET" in
         aarch64-linux-android)
-            ANDROID_ARCH=arm64
-            TARGET=aarch64-linux-musl
-            NDK_ARCH_DIR=arch-arm64
+            ANDROID_ABI=arm64-v8a
             ;;
         arm-linux-android)
-            ANDROID_ARCH=arm
-            TARGET=arm-linux-musleabi
-            NDK_ARCH_DIR=arch-arm
+            ANDROID_ABI=armeabi-v7a
             ;;
         x86_64-linux-android)
-            ANDROID_ARCH=x86_64
-            TARGET=x86_64-linux-musl
-            NDK_ARCH_DIR=arch-x86_64
+            ANDROID_ABI=x86_64
             ;;
         x86-linux-android)
-            ANDROID_ARCH=x86
-            TARGET=x86-linux-musl
-            NDK_ARCH_DIR=arch-x86
+            ANDROID_ABI=x86
             ;;
         *)
             echo -e "${RED}未知的 Android 架构: $TARGET${NC}"
             exit 1
             ;;
     esac
-
-    # Android NDK 路径 - 使用新版本 NDK 的统一 sysroot
-    ANDROID_SYSROOT="$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
-    ANDROID_INCLUDE="$ANDROID_SYSROOT/usr/include"
-    # 库文件仍然在 platforms 目录下的特定架构目录中
-    ANDROID_LIB="$ANDROID_NDK_ROOT/platforms/$ANDROID_PLATFORM/$NDK_ARCH_DIR/usr/lib"
     
-    # 检查必要的文件是否存在
-    if [ ! -d "$ANDROID_INCLUDE" ]; then
-        echo -e "${RED}错误: Android NDK 包含目录未找到: $ANDROID_INCLUDE${NC}"
-        exit 1
-    fi
+    # 设置编译器标志
+    export CFLAGS="$ZIG_OPTIMIZE_FLAGS"
+    export CXXFLAGS="$ZIG_OPTIMIZE_FLAGS"
     
-    if [ ! -d "$ANDROID_LIB" ]; then
-        echo -e "${RED}错误: Android NDK 库目录未找到: $ANDROID_LIB${NC}"
-        exit 1
-    fi
-
-    # 使用 Zig 作为编译器，配合 Android NDK 的 libc
-    # 避免使用 --sysroot 和 -L 同时，因为 Zig 会错误地连接路径
-    # 使用 --sysroot 主要用于 headers 和 system libraries
-    if [ "$OPTIMIZE_SIZE" = true ]; then
-        # 大小优化标志
-        ZIG_OPTIMIZE_FLAGS="-Os -DNDEBUG -ffunction-sections -fdata-sections -fvisibility=hidden"
-        LDFLAGS_OPTIMIZE="-Wl,--gc-sections -Wl,--strip-all"
-    else
-        ZIG_OPTIMIZE_FLAGS="-O2 -DNDEBUG"
-        LDFLAGS_OPTIMIZE=""
-    fi
-    
-    ZIG_FLAGS="-target $TARGET --sysroot=$ANDROID_SYSROOT $ZIG_OPTIMIZE_FLAGS"
-    export CC="zig cc $ZIG_FLAGS"
-    export CXX="zig c++ $ZIG_FLAGS"
-    
-    # 设置 LDFLAGS 来指定额外的库搜索路径
-    export LDFLAGS="-L$ANDROID_LIB $LDFLAGS_OPTIMIZE"
-
-    echo -e "${BLUE}Android NDK 配置:${NC}"
-    echo -e "${BLUE}  NDK Root: $ANDROID_NDK_ROOT${NC}"
-    echo -e "${BLUE}  Platform: $ANDROID_PLATFORM${NC}"
-    echo -e "${BLUE}  Sysroot: $ANDROID_SYSROOT${NC}"
-    echo -e "${BLUE}  Zig Target: $TARGET${NC}"
-    echo -e "${BLUE}  CMake 系统名: $CMAKE_SYSTEM_NAME${NC}"
-    echo -e "${BLUE}  CMake 处理器: $CMAKE_SYSTEM_PROCESSOR${NC}"
-    echo -e "${BLUE}  大小优化: $OPTIMIZE_SIZE${NC}"
-    
-    CMAKE_CMD="cmake -DCMAKE_INSTALL_PREFIX=$INSTALL_DIR -DCMAKE_BUILD_TYPE=$BUILD_TYPE -DBUILD_SHARED_LIBS=ON -DBUILD_TEST=OFF"
+    # toolchain 参数必须最前，其它参数和源码目录最后
+    CMAKE_CMD="cmake -DCMAKE_TOOLCHAIN_FILE=$ANDROID_TOOLCHAIN_FILE -DANDROID_ABI=$ANDROID_ABI -DANDROID_PLATFORM=$ANDROID_PLATFORM" 
+    CMAKE_CMD="$CMAKE_CMD -DCMAKE_INSTALL_PREFIX=$INSTALL_DIR -DCMAKE_BUILD_TYPE=$BUILD_TYPE"
     CMAKE_CMD="$CMAKE_CMD -DCMAKE_SYSTEM_NAME=$CMAKE_SYSTEM_NAME -DCMAKE_SYSTEM_PROCESSOR=$CMAKE_SYSTEM_PROCESSOR"
+    CMAKE_CMD="$CMAKE_CMD -DBUILD_SHARED_LIBS=ON -DBUILD_TEST=OFF"
+    
 elif [[ "$TARGET" == *"-linux-harmonyos"* ]]; then
     # 检查 HarmonyOS SDK
     export HARMONYOS_SDK_ROOT="${HARMONYOS_SDK_HOME:-~/sdk/harmonyos/ohos-sdk/linux/native-linux-x64-4.1.9.4-Release/native}"
@@ -307,29 +275,22 @@ elif [[ "$TARGET" == *"-linux-harmonyos"* ]]; then
         echo -e "${RED}请设置 HARMONYOS_SDK_HOME 环境变量${NC}"
         exit 1
     fi
+    TOOLCHAIN=$HARMONYOS_SDK_ROOT/llvm
+    export PATH=$TOOLCHAIN/bin:$PATH
+    HARMONYOS_TOOLCHAIN_FILE="$HARMONYOS_SDK_ROOT/build/cmake/ohos.toolchain.cmake"
 
-    HARMONYOS_API_LEVEL=9
-    
     case "$TARGET" in
         aarch64-linux-harmonyos)
             OHOS_ARCH=arm64-v8a
-            TARGET=aarch64-linux-musl
-            NDK_ARCH_DIR=aarch64
             ;;
         arm-linux-harmonyos)
             OHOS_ARCH=armeabi-v7a
-            TARGET=arm-linux-musleabi
-            NDK_ARCH_DIR=arm
             ;;
         x86_64-linux-harmonyos)
             OHOS_ARCH=x86_64
-            TARGET=x86_64-linux-musl
-            NDK_ARCH_DIR=x86_64
             ;;
         x86-linux-harmonyos)
             OHOS_ARCH=x86
-            TARGET=x86-linux-musl
-            NDK_ARCH_DIR=x86
             ;;
         *)
             echo -e "${RED}未知的 HarmonyOS 架构: $TARGET${NC}"
@@ -337,66 +298,20 @@ elif [[ "$TARGET" == *"-linux-harmonyos"* ]]; then
             ;;
     esac
 
-    # HarmonyOS SDK 路径 - 使用统一 sysroot
-    HARMONYOS_SYSROOT="$HARMONYOS_SDK_ROOT/sysroot"
-    HARMONYOS_INCLUDE="$HARMONYOS_SYSROOT/usr/include"
-    # 库文件路径
-    HARMONYOS_LIB="$HARMONYOS_SYSROOT/usr/lib/$NDK_ARCH_DIR-linux-ohos"
     
-    # 检查必要的文件是否存在
-    if [ ! -d "$HARMONYOS_INCLUDE" ]; then
-        echo -e "${RED}错误: HarmonyOS SDK 包含目录未找到: $HARMONYOS_INCLUDE${NC}"
-        exit 1
-    fi
-    
-    if [ ! -d "$HARMONYOS_LIB" ]; then
-        echo -e "${RED}错误: HarmonyOS SDK 库目录未找到: $HARMONYOS_LIB${NC}"
-        exit 1
-    fi
+    # 设置编译器标志
+    export CFLAGS="$ZIG_OPTIMIZE_FLAGS"
+    export CXXFLAGS="$ZIG_OPTIMIZE_FLAGS"
 
-    # 使用 Zig 作为编译器，配合 HarmonyOS SDK 的 libc
-    # 避免使用 --sysroot 和 -L 同时，因为 Zig 会错误地连接路径
-    # 使用 --sysroot 主要用于 headers 和 system libraries
-    if [ "$OPTIMIZE_SIZE" = true ]; then
-        # 大小优化标志
-        ZIG_OPTIMIZE_FLAGS="-Os -DNDEBUG -ffunction-sections -fdata-sections -fvisibility=hidden"
-        LDFLAGS_OPTIMIZE="-Wl,--gc-sections -Wl,--strip-all"
-    else
-        ZIG_OPTIMIZE_FLAGS="-O2 -DNDEBUG"
-        LDFLAGS_OPTIMIZE=""
-    fi
-    
-    ZIG_FLAGS="-target $TARGET --sysroot=$HARMONYOS_SYSROOT $ZIG_OPTIMIZE_FLAGS"
-    export CC="zig cc $ZIG_FLAGS"
-    export CXX="zig c++ $ZIG_FLAGS"
-    
-    # 设置 LDFLAGS 来指定额外的库搜索路径
-    export LDFLAGS="-L$HARMONYOS_LIB $LDFLAGS_OPTIMIZE"
-    
-    echo -e "${BLUE}HarmonyOS SDK 配置:${NC}"
-    echo -e "${BLUE}  SDK Root: $HARMONYOS_SDK_ROOT${NC}"
-    echo -e "${BLUE}  API Level: $HARMONYOS_API_LEVEL${NC}"
-    echo -e "${BLUE}  Sysroot: $HARMONYOS_SYSROOT${NC}"
-    echo -e "${BLUE}  Zig Target: $TARGET${NC}"
-    echo -e "${BLUE}  CMake 系统名: $CMAKE_SYSTEM_NAME${NC}"
-    echo -e "${BLUE}  CMake 处理器: $CMAKE_SYSTEM_PROCESSOR${NC}"
-    echo -e "${BLUE}  大小优化: $OPTIMIZE_SIZE${NC}"
-    
-    CMAKE_CMD="cmake -DCMAKE_INSTALL_PREFIX=$INSTALL_DIR -DCMAKE_BUILD_TYPE=$BUILD_TYPE -DBUILD_SHARED_LIBS=ON -DBUILD_TEST=OFF"
+    # toolchain 参数必须最前，其它参数和源码目录最后
+    CMAKE_CMD="cmake -DCMAKE_TOOLCHAIN_FILE=$HARMONYOS_TOOLCHAIN_FILE -DOHOS_ARCH=$OHOS_ARCH"
+    CMAKE_CMD="$CMAKE_CMD -DCMAKE_INSTALL_PREFIX=$INSTALL_DIR -DCMAKE_BUILD_TYPE=$BUILD_TYPE"
     CMAKE_CMD="$CMAKE_CMD -DCMAKE_SYSTEM_NAME=$CMAKE_SYSTEM_NAME -DCMAKE_SYSTEM_PROCESSOR=$CMAKE_SYSTEM_PROCESSOR"
+    CMAKE_CMD="$CMAKE_CMD -DBUILD_SHARED_LIBS=ON -DBUILD_TEST=OFF"
 else
     
     # 使用 Zig 作为编译器
     ZIG_PATH=$(command -v zig)
-    
-    if [ "$OPTIMIZE_SIZE" = true ]; then
-        # 大小优化标志
-        ZIG_OPTIMIZE_FLAGS="-Os -DNDEBUG -ffunction-sections -fdata-sections -fvisibility=hidden"
-        export LDFLAGS="-Wl,--gc-sections -Wl,--strip-all"
-    else
-        ZIG_OPTIMIZE_FLAGS="-O2 -DNDEBUG"
-        export LDFLAGS=""
-    fi
     
     export CC="$ZIG_PATH cc -target $TARGET $ZIG_OPTIMIZE_FLAGS"
     export CXX="$ZIG_PATH c++ -target $TARGET $ZIG_OPTIMIZE_FLAGS"
@@ -456,13 +371,33 @@ if [ $? -eq 0 ]; then
     if [ "$OPTIMIZE_SIZE" = true ]; then
         echo -e "${YELLOW}执行额外的库文件压缩...${NC}"
         
-        # 检查strip工具是否可用
+        # 检查strip工具是否可用，优先使用平台特定的工具
         STRIP_TOOL="strip"
-        if command -v "${TARGET%-*}-strip" &> /dev/null; then
-            STRIP_TOOL="${TARGET%-*}-strip"
-        elif command -v "llvm-strip" &> /dev/null; then
-            STRIP_TOOL="llvm-strip"
+        
+        if [[ "$TARGET" == *"-linux-android"* ]]; then
+            # Android 使用 NDK 的 strip 工具
+            if [ -n "$TOOLCHAIN" ] && [ -f "$TOOLCHAIN/bin/llvm-strip" ]; then
+                STRIP_TOOL="$TOOLCHAIN/bin/llvm-strip"
+            elif command -v "llvm-strip" &> /dev/null; then
+                STRIP_TOOL="llvm-strip"
+            fi
+        elif [[ "$TARGET" == *"-linux-harmonyos"* ]]; then
+            # HarmonyOS 使用 SDK 的 strip 工具
+            if [ -n "$TOOLCHAIN" ] && [ -f "$TOOLCHAIN/bin/llvm-strip" ]; then
+                STRIP_TOOL="$TOOLCHAIN/bin/llvm-strip"
+            elif command -v "llvm-strip" &> /dev/null; then
+                STRIP_TOOL="llvm-strip"
+            fi
+        else
+            # 其他平台使用通用的 strip 工具
+            if command -v "${TARGET%-*}-strip" &> /dev/null; then
+                STRIP_TOOL="${TARGET%-*}-strip"
+            elif command -v "llvm-strip" &> /dev/null; then
+                STRIP_TOOL="llvm-strip"
+            fi
         fi
+        
+        echo -e "${BLUE}使用 strip 工具: $STRIP_TOOL${NC}"
         
         # 压缩所有共享库
         if [ -d "$INSTALL_DIR/lib" ]; then

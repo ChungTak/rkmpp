@@ -216,7 +216,7 @@ cd "$BUILD_DIR"
 # 根据目标平台配置编译器和工具链
 if [[ "$TARGET" == *"-linux-android"* ]]; then
     # 检查 Android NDK
-    export ANDROID_NDK_ROOT="${ANDROID_NDK_HOME:-/dataset/datavol/sdk/android_ndk/android-ndk-r21e}"
+    export ANDROID_NDK_ROOT="${ANDROID_NDK_HOME:-~/sdk/android_ndk/android-ndk-r21e}"
     if [ ! -d "$ANDROID_NDK_ROOT" ]; then
         echo -e "${RED}错误: Android NDK 未找到: $ANDROID_NDK_ROOT${NC}"
         echo -e "${RED}请设置 ANDROID_NDK_HOME 环境变量${NC}"
@@ -301,7 +301,7 @@ if [[ "$TARGET" == *"-linux-android"* ]]; then
     CMAKE_CMD="$CMAKE_CMD -DCMAKE_SYSTEM_NAME=$CMAKE_SYSTEM_NAME -DCMAKE_SYSTEM_PROCESSOR=$CMAKE_SYSTEM_PROCESSOR"
 elif [[ "$TARGET" == *"-linux-harmonyos"* ]]; then
     # 检查 HarmonyOS SDK
-    export HARMONYOS_SDK_ROOT="${HARMONYOS_SDK_HOME:-/dataset/datavol/sdk/harmonyos/ohos-sdk/linux/native-linux-x64-4.1.9.4-Release/native}"
+    export HARMONYOS_SDK_ROOT="${HARMONYOS_SDK_HOME:-~/sdk/harmonyos/ohos-sdk/linux/native-linux-x64-4.1.9.4-Release/native}"
     if [ ! -d "$HARMONYOS_SDK_ROOT" ]; then
         echo -e "${RED}错误: HarmonyOS SDK 未找到: $HARMONYOS_SDK_ROOT${NC}"
         echo -e "${RED}请设置 HARMONYOS_SDK_HOME 环境变量${NC}"

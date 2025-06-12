@@ -79,6 +79,20 @@ BUILD_TYPE="Release"
 INSTALL_DIR="$PROJECT_ROOT_DIR/rkmpp_install/Release/${TARGET}"
 BUILD_DIR="$PROJECT_ROOT_DIR/rkmpp_build/${TARGET}"
 
+# 处理清理动作
+if [ "$ACTION" = "clean" ]; then
+    echo -e "${YELLOW}清理构建目录和缓存...${NC}"
+    rm -rf "$PROJECT_ROOT_DIR/rkmpp_build"
+    echo -e "${GREEN}构建目录已清理!${NC}"
+    exit 0
+elif [ "$ACTION" = "clean-dist" ]; then
+    echo -e "${YELLOW}清理构建目录和安装目录...${NC}"
+    rm -rf "$PROJECT_ROOT_DIR/rkmpp_build"
+    rm -rf "$PROJECT_ROOT_DIR/rkmpp_install"
+    echo -e "${GREEN}构建目录和安装目录已清理!${NC}"
+    exit 0
+fi
+
 # 设置 CMake 交叉编译变量 - 基于原始目标而不是 Zig 目标
 case "$TARGET" in
     arm-linux-*)
@@ -166,19 +180,6 @@ download_rkmpp() {
 # 下载并准备 rkmpp 源码
 download_rkmpp "$RKMPP_SOURCE_DIR"
 
-# 处理清理动作
-if [ "$ACTION" = "clean" ]; then
-    echo -e "${YELLOW}清理构建目录和缓存...${NC}"
-    rm -rf "$PROJECT_ROOT_DIR/rkmpp_build"
-    echo -e "${GREEN}构建目录已清理!${NC}"
-    exit 0
-elif [ "$ACTION" = "clean-dist" ]; then
-    echo -e "${YELLOW}清理构建目录和安装目录...${NC}"
-    rm -rf "$PROJECT_ROOT_DIR/rkmpp_build"
-    rm -rf "$PROJECT_ROOT_DIR/rkmpp_install"
-    echo -e "${GREEN}构建目录和安装目录已清理!${NC}"
-    exit 0
-fi
 
 # 检查Zig是否安装
 if ! command -v zig &> /dev/null; then

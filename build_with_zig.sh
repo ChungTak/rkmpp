@@ -214,6 +214,7 @@ else
 fi
 
 # 创建安装目录
+rm -rf "$INSTALL_DIR"
 mkdir -p "$INSTALL_DIR"
 
 # 创建RKMPP构建目录（每次都清理，避免 CMake 缓存污染）
